@@ -39,6 +39,11 @@ else
     fi
 fi
 
+# ── 加载环境变量 ─────────────────────────────
+if [ -f "$PROJECT_DIR/.env" ]; then
+    export $(grep -v '^#' "$PROJECT_DIR/.env" | xargs)
+fi
+
 # ── 2. 激活 conda 环境 ───────────────────────
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate $CONDA_ENV

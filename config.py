@@ -30,7 +30,7 @@ def check_gpu() -> None:
         print(f"  {p}    →  kill {pid}")
 
 # ── LLM（DashScope / OpenAI-compatible） ──────────────────────────────────
-DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "sk-765ab8c8b795499dba6bea8e5373646f")
+DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
 DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 LLM_MODEL = "qwen-plus"          # 生成用，省钱；换 claude 见下方注释
