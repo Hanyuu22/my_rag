@@ -1,0 +1,302 @@
+[
+  {
+    "id": 1,
+    "category": "反应原理与条件",
+    "question": "加氢裂化装置涉及的主要化学反应类型有哪些？",
+    "reference": ""
+  },
+  {
+    "id": 2,
+    "category": "反应原理与条件",
+    "question": "加氢精制和加氢裂化的区别是什么？",
+    "reference": ""
+  },
+  {
+    "id": 3,
+    "category": "反应原理与条件",
+    "question": "氢分压对加氢裂化反应有什么影响？",
+    "reference": ""
+  },
+  {
+    "id": 4,
+    "category": "反应原理与条件",
+    "question": "冷氢（急冷氢）在反应器中的主要作用是什么？",
+    "reference": ""
+  },
+  {
+    "id": 5,
+    "category": "反应原理与条件",
+    "question": "加氢裂化催化剂的功能组分有哪些，各有什么作用？",
+    "reference": ""
+  },
+  {
+    "id": 6,
+    "category": "反应原理与条件",
+    "question": "反应温度升高对加氢裂化产品分布有什么影响？",
+    "reference": ""
+  },
+  {
+    "id": 7,
+    "category": "反应原理与条件",
+    "question": "液时空速（LHSV）的含义是什么？它如何影响反应效果？",
+    "reference": ""
+  },
+  {
+    "id": 8,
+    "category": "反应原理与条件",
+    "question": "循环氢在加氢裂化系统中的主要作用是什么？",
+    "reference": ""
+  },
+  {
+    "id": 9,
+    "category": "工艺流程描述",
+    "question": "加氢裂化装置的原料油进入反应系统前需要进行哪些预处理？",
+    "reference": ""
+  },
+  {
+    "id": 10,
+    "category": "工艺流程描述",
+    "question": "请描述加氢裂化装置的主要工艺流程（从原料到产品）。",
+    "reference": ""
+  },
+  {
+    "id": 11,
+    "category": "工艺流程描述",
+    "question": "高压分离器和低压分离器的作用分别是什么？",
+    "reference": ""
+  },
+  {
+    "id": 12,
+    "category": "工艺流程描述",
+    "question": "循环氢压缩机在系统中有什么作用？",
+    "reference": ""
+  },
+  {
+    "id": 13,
+    "category": "工艺流程描述",
+    "question": "分馏系统的功能是什么？主要可分离出哪些产品？",
+    "reference": ""
+  },
+  {
+    "id": 14,
+    "category": "工艺流程描述",
+    "question": "新氢是如何补充进入加氢裂化系统的？",
+    "reference": ""
+  },
+  {
+    "id": 15,
+    "category": "工艺流程描述",
+    "question": "热高压分离器的工作原理和主要功能是什么？",
+    "reference": ""
+  },
+  {
+    "id": 16,
+    "category": "工艺流程描述",
+    "question": "原料油在进入反应器之前的换热流程是怎样安排的？",
+    "reference": ""
+  },
+  {
+    "id": 17,
+    "category": "操作参数（定量）",
+    "question": "加氢精制反应器入口温度的正常操作范围是多少？",
+    "reference": ""
+  },
+  {
+    "id": 18,
+    "category": "操作参数（定量）",
+    "question": "系统氢分压的操作范围是多少？",
+    "reference": ""
+  },
+  {
+    "id": 19,
+    "category": "操作参数（定量）",
+    "question": "加氢裂化反应器的操作压力是多少？",
+    "reference": ""
+  },
+  {
+    "id": 20,
+    "category": "操作参数（定量）",
+    "question": "氢油体积比（循环氢与原料油之比）的操作参数范围是多少？",
+    "reference": ""
+  },
+  {
+    "id": 21,
+    "category": "操作参数（定量）",
+    "question": "分馏塔的操作温度范围是多少？",
+    "reference": ""
+  },
+  {
+    "id": 22,
+    "category": "操作参数（定量）",
+    "question": "循环氢纯度的控制指标是多少？",
+    "reference": ""
+  },
+  {
+    "id": 23,
+    "category": "操作参数（定量）",
+    "question": "进料原料油中硫含量（或氮含量）的限制指标是多少？",
+    "reference": ""
+  },
+  {
+    "id": 24,
+    "category": "操作参数（定量）",
+    "question": "催化剂床层温差（△T）的控制上限是多少？",
+    "reference": ""
+  },
+  {
+    "id": 25,
+    "category": "开停工程序",
+    "question": "装置首次开工前需要进行哪些主要准备工作？",
+    "reference": ""
+  },
+  {
+    "id": 26,
+    "category": "开停工程序",
+    "question": "催化剂干燥和预硫化的主要步骤和条件是什么？",
+    "reference": ""
+  },
+  {
+    "id": 27,
+    "category": "开停工程序",
+    "question": "系统气密试验的目的和主要步骤是什么？",
+    "reference": ""
+  },
+  {
+    "id": 28,
+    "category": "开停工程序",
+    "question": "装置正常停工的基本操作步骤是什么？",
+    "reference": ""
+  },
+  {
+    "id": 29,
+    "category": "开停工程序",
+    "question": "装置引油操作时有哪些主要注意事项？",
+    "reference": ""
+  },
+  {
+    "id": 30,
+    "category": "开停工程序",
+    "question": "开工升温过程中需要重点监控哪些关键参数？",
+    "reference": ""
+  },
+  {
+    "id": 31,
+    "category": "开停工程序",
+    "question": "装置退油（赶油）操作的要点和步骤是什么？",
+    "reference": ""
+  },
+  {
+    "id": 32,
+    "category": "开停工程序",
+    "question": "催化剂卸剂前需要进行哪些处理和准备工作？",
+    "reference": ""
+  },
+  {
+    "id": 33,
+    "category": "催化剂管理",
+    "question": "加氢裂化催化剂活性下降（失活）的主要原因有哪些？",
+    "reference": ""
+  },
+  {
+    "id": 34,
+    "category": "催化剂管理",
+    "question": "催化剂再生的目的和基本方法是什么？",
+    "reference": ""
+  },
+  {
+    "id": 35,
+    "category": "催化剂管理",
+    "question": "如何判断催化剂是否需要更换（到龄判断标准）？",
+    "reference": ""
+  },
+  {
+    "id": 36,
+    "category": "催化剂管理",
+    "question": "催化剂预硫化的目的是什么，如何进行预硫化操作？",
+    "reference": ""
+  },
+  {
+    "id": 37,
+    "category": "催化剂管理",
+    "question": "催化剂床层压降升高的可能原因有哪些？如何处理？",
+    "reference": ""
+  },
+  {
+    "id": 38,
+    "category": "催化剂管理",
+    "question": "原料油中氮化物和金属杂质对催化剂有哪些危害？",
+    "reference": ""
+  },
+  {
+    "id": 39,
+    "category": "安全与应急处理",
+    "question": "反应器床层温度急剧升高（飞温）时应如何处理？",
+    "reference": ""
+  },
+  {
+    "id": 40,
+    "category": "安全与应急处理",
+    "question": "装置发生氢气泄漏时的紧急处置措施是什么？",
+    "reference": ""
+  },
+  {
+    "id": 41,
+    "category": "安全与应急处理",
+    "question": "高压系统管线或设备发生泄漏时的应急处置步骤是什么？",
+    "reference": ""
+  },
+  {
+    "id": 42,
+    "category": "安全与应急处理",
+    "question": "循环氢压缩机突然跳停（停机）时应如何处理？",
+    "reference": ""
+  },
+  {
+    "id": 43,
+    "category": "安全与应急处理",
+    "question": "装置发生全停电时的紧急操作步骤是什么？",
+    "reference": ""
+  },
+  {
+    "id": 44,
+    "category": "安全与应急处理",
+    "question": "装置区域发生火灾时的紧急停工操作步骤是什么？",
+    "reference": ""
+  },
+  {
+    "id": 45,
+    "category": "Fallback测试（知识库外）",
+    "question": "2023年国际原油价格走势是怎样的？",
+    "reference": "此问题超出知识库范围，知识库不包含原油价格信息。"
+  },
+  {
+    "id": 46,
+    "category": "Fallback测试（知识库外）",
+    "question": "全球最大的炼油厂在哪里，年处理量是多少？",
+    "reference": "此问题超出知识库范围，知识库仅包含本装置的工艺技术规程，不包含全球炼油厂排名信息。"
+  },
+  {
+    "id": 47,
+    "category": "Fallback测试（知识库外）",
+    "question": "人工智能在石化行业的最新应用进展有哪些？",
+    "reference": "此问题超出知识库范围，知识库不包含人工智能应用相关内容。"
+  },
+  {
+    "id": 48,
+    "category": "Fallback测试（知识库外）",
+    "question": "本装置下一次大修计划安排在什么时候？",
+    "reference": "此问题超出知识库范围，知识库不包含具体检修计划安排信息。"
+  },
+  {
+    "id": 49,
+    "category": "路由测试（闲聊）",
+    "question": "你好，请介绍一下你自己和你能做什么。",
+    "reference": "此为闲聊问题，应走 direct 路由，不检索知识库。"
+  },
+  {
+    "id": 50,
+    "category": "路由测试（闲聊）",
+    "question": "今天天气怎么样？",
+    "reference": "此为闲聊问题，应走 direct 路由，不检索知识库。"
+  }
+]

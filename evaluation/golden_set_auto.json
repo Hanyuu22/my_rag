@@ -1,0 +1,122 @@
+[
+  {
+    "id": 1,
+    "category": "single_hop_specific_query_synthesizer",
+    "question": "反应加热炉存在哪些中毒危险？",
+    "reference": "反应加热炉的主要危险包括火灾和爆炸，同时还存在中毒危险，此外还有高温和噪声危害。",
+    "answer": "",
+    "contexts": [],
+    "scores": [],
+    "route": "",
+    "elapsed": null,
+    "generated_at": "2026-03-19 22:22:30"
+  },
+  {
+    "id": 2,
+    "category": "single_hop_specific_query_synthesizer",
+    "question": "分馏塔T-202保持塔压稳定的意义是什么？",
+    "reference": "分馏塔T-202必须保持塔压稳定，因为塔压的微小变化会引起塔内较大波动，塔压一经确定就建立了相应的温度和组成平衡分布，因此塔压不作为操作变量随意调整。",
+    "answer": "",
+    "contexts": [],
+    "scores": [],
+    "route": "",
+    "elapsed": null,
+    "generated_at": "2026-03-19 22:22:30"
+  },
+  {
+    "id": 3,
+    "category": "single_hop_specific_query_synthesizer",
+    "question": "烷烃加氢裂化的反应机理是什么？",
+    "reference": "烷烃加氢裂化通过正碳离子反应机理进行：烷烃分子首先在加氢裂化催化剂的金属中心上脱氢生成烯烃；烯烃在酸性中心上质子化形成正碳离子，正碳离子发生C-C键断裂生成较小的正碳离子和烯烃；生成的小烯烃可进一步裂化或加氢生成烷烃，正碳离子也可进一步裂化或脱质子生成烯烃后再加氢成烷烃。",
+    "answer": "",
+    "contexts": [],
+    "scores": [],
+    "route": "",
+    "elapsed": null,
+    "generated_at": "2026-03-19 22:22:30"
+  },
+  {
+    "id": 4,
+    "category": "single_hop_specific_query_synthesizer",
+    "question": "发生氨气泄漏时如何用稀酸进行中和处理？",
+    "reference": "可用食醋（乙酸）或其他稀酸进行中和处理，也可用雾状水对泄漏的氨气进行稀释溶解。",
+    "answer": "",
+    "contexts": [],
+    "scores": [],
+    "route": "",
+    "elapsed": null,
+    "generated_at": "2026-03-19 22:22:30"
+  },
+  {
+    "id": 5,
+    "category": "single_hop_specific_query_synthesizer",
+    "question": "如何控制和抑制可燃气体泄漏形成的蒸气云扩散？",
+    "reference": "可喷射雾状水来抑制蒸气云或改变其扩散方向，防止气体通过下水道、通风系统和封闭空间扩散。不得将水直接喷射到泄漏点或泄漏源上。",
+    "answer": "",
+    "contexts": [],
+    "scores": [],
+    "route": "",
+    "elapsed": null,
+    "generated_at": "2026-03-19 22:22:30"
+  },
+  {
+    "id": 6,
+    "category": "single_hop_specific_query_synthesizer",
+    "question": "扑救可燃气体火灾时，隔离助燃物的具体措施有哪些？",
+    "reference": "隔离助燃物的措施包括：关闭相关阀门切断流向着火区域的可燃气体和液体，或通过管道将燃烧容器或受威胁容器中的可燃液体引导至安全区域。",
+    "answer": "",
+    "contexts": [],
+    "scores": [],
+    "route": "",
+    "elapsed": null,
+    "generated_at": "2026-03-19 22:22:30"
+  },
+  {
+    "id": 7,
+    "category": "multi_hop_abstract_query_synthesizer",
+    "question": "DCS控制系统ECS-700与装置开工程序之间如何配合，确保高温高压装置在开工和生产切换过程中安全有序执行？",
+    "reference": "DCS控制系统ECS-700提供自动监控和调节功能，是高风险切换过程中维持安全操作参数的关键。装置开工必须严格遵守公司开停工及检修安全管理规定，严格落实各项安全措施。装置停工由生产调度统一指挥，体现集中协调的原则。控制系统的联锁、设定值调整和报警管理等动作需与计划操作阶段和危险消减措施同步，从而确保开工和生产切换过程的安全有序执行。",
+    "answer": "",
+    "contexts": [],
+    "scores": [],
+    "route": "",
+    "elapsed": null,
+    "generated_at": "2026-03-19 22:22:30"
+  },
+  {
+    "id": 8,
+    "category": "multi_hop_abstract_query_synthesizer",
+    "question": "可燃物质与空气形成爆炸性混合物的危险性，与密闭操作要求之间有什么内在关联？",
+    "reference": "可燃物质与空气混合后可形成爆炸性混合气体，遇明火或高热即可点燃爆炸。正是由于这种爆炸性，操作必须采用密闭系统，严格执行密闭操作、加强通风、使用防爆设备、防止气体泄漏进入工作场所空气等措施，以消除点火源并降低爆炸风险。",
+    "answer": "",
+    "contexts": [],
+    "scores": [],
+    "route": "",
+    "elapsed": null,
+    "generated_at": "2026-03-19 22:22:30"
+  },
+  {
+    "id": 9,
+    "category": "multi_hop_specific_query_synthesizer",
+    "question": "循环氢中硫含量升高对加氢脱氮和芳烃饱和有什么影响？进料硫含量超标时应如何处置？",
+    "reference": "循环氢中硫含量升高会影响加氢脱氮和芳烃饱和反应的效果。当进料硫含量超过规格指标时，需要提高反应温度以达到所要求的脱硫率。",
+    "answer": "",
+    "contexts": [],
+    "scores": [],
+    "route": "",
+    "elapsed": null,
+    "generated_at": "2026-03-19 22:22:30"
+  },
+  {
+    "id": 10,
+    "category": "multi_hop_specific_query_synthesizer",
+    "question": "精制反应器顶部催化剂床层为何会形成硫化铁结壳堵塞？应如何预防？",
+    "reference": "原料油中的铁离子极易生成硫化物，沉积在催化剂颗粒表面和颗粒间隙中，通常在催化剂床层顶部形成结壳，导致床层压降升高，严重时可能迫使装置提前停工或更换催化剂。预防措施是定期分析进料金属含量，将其控制在规定指标以内。",
+    "answer": "",
+    "contexts": [],
+    "scores": [],
+    "route": "",
+    "elapsed": null,
+    "generated_at": "2026-03-19 22:22:30"
+  }
+]

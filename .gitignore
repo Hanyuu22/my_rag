@@ -1,0 +1,38 @@
+# 数据与模型（体积大，不入库）
+data/chroma_db/
+data/raw/
+data/mineru_output/
+data/qa_dataset/
+data/results/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# 环境
+.env
+.env.*
+*.key
+
+# 日志
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.bak
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
