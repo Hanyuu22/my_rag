@@ -565,3 +565,100 @@ full_chain = ensemble_retriever | rerank_step | format_docs | prompt | llm | Str
 |---|---|---|
 | 目标 | 理解每个模块的工程决策 | 开箱即用的生产服务 |
 | 价值 | 面试能讲清楚链路 | 快速部署验证 |
+
+---
+
+## 六、知识库现状（2026-04-16）
+
+| 库名 | Chunks | 来源 | Embedding 模型 | 说明 |
+|------|--------|------|----------------|------|
+| `hydro_manual` | 1,632 | 加氢裂化工艺规程（78页） | bge-large-zh-v1.5 | 含 VLM OCR 补表，论文核心实验数据集 |
+| `investment_db` | 7,440 | 投资机构&项目 xlsx | bge-large-zh-v1.5 | 专用清洗脚本，93列→结构化 chunks |
+| `energy_zh` | 12,508 | CNPC/NEA 等中文能源报告（12份） | bge-m3 | 跨语言检索配对库 |
+| `energy_en` | 5,961 | BP/EIA/Shell 等英文能源报告（17份） | bge-m3 | 与 energy_zh 配对 |
+| `rag_docs` | 916 | 其他文档 | bge-large-zh-v1.5 | — |
+| `gb_standards_512` | ~6,000 | GB 国标 41份（实验用） | bge-large-zh-v1.5 | chunk_size=512/overlap=64，V4 A1 组 |
+| `gb_standards_1024` | ~3,200 | GB 国标 41份（实验用） | bge-large-zh-v1.5 | chunk_size=1024/overlap=100，V4 A2 组 |
+| `gb_standards` | 433+（入库中） | GB 国标 200+ PDF | bge-large-zh-v1.5 | 完整库，入库完成后作为 V4 主实验库 |
+
+---
+
+## 七、V4 实验计划（GB 入库完成后执行）
+
+### 7.1 前置条件
+
+- [ ] `gb_standards` 完整入库（目标 8k~15k chunks）
+- [ ] 2000 条分类测试集生成 + ground truth 标注
+- [ ] RAPTOR 实现（`splitters/raptor_builder.py`，~150 行）
+
+### 7.2 实验分组（8组对比）
+
+| 组别 | chunk_size | overlap | RAPTOR | ES | 说明 |
+|------|-----------|---------|--------|----|------|
+| A1 | 512 | 64 | ❌ | ❌ | Baseline，`gb_standards_512` 已有数据 |
+| A2 | 1024 | 100 | ❌ | ❌ | 需新建 `gb_standards_1024` collection |
+| B1 | 512 | 64 | ✅ | ❌ | 在 A1 基础上追加摘要节点 |
+| B2 | 1024 | 100 | ✅ | ❌ | 在 A2 基础上追加摘要节点 |
+| C1 | 512 | 64 | ❌ | ✅ | 仅在 gb_standards 最终 chunks > 40k 时执行 |
+| C2 | 1024 | 100 | ❌ | ✅ | 同上 |
+| D1 | 512 | 64 | ✅ | ✅ | 同上 |
+| D2 | 1024 | 100 | ✅ | ✅ | 同上 |
+
+> ES 必要性判断：完整入库后，若 chunks ≤ 40k，跳过 C/D 组，只做 A/B 组。
+
+### 7.3 执行顺序
+
+```
+P0 完成 GB 完整入库（断点续传）
+  ↓
+P1 生成 2000 条测试集（generate_qa_v2.py + annotate_chunk_ids.py）
+  题型分布：单跳 60% / 多跳 25% / 跨文档汇总 15%
+  ↓
+P2 实现 RAPTOR（splitters/raptor_builder.py）
+  不重跑 MinerU，在现有 chunks 上聚类 + LLM 摘要 + 追加写回
+  ↓
+P3 运行 8 组实验（scripts/run_eval_full.py，串行）
+  A1 → A2（需重新入库）→ B1 → B2 → [视情况 C/D]
+  ↓
+P4 分析结果，重点关注多跳抽象题 ContextPrecision 变化
+```
+
+### 7.4 评估脚本
+
+```bash
+# 生成测试集
+python scripts/generate_qa_v2.py \
+  --input_dir data/raw/gb_standards/mineru_output \
+  --target 2000 \
+  --output data/qa_dataset/gb_qa_2000.json
+
+# 标注 ground truth
+python scripts/annotate_chunk_ids.py \
+  --input data/qa_dataset/gb_qa_2000.json \
+  --collection gb_standards
+
+# 批量评估（每组）
+python scripts/run_eval_full.py \
+  --collection gb_standards \
+  --input data/qa_dataset/gb_qa_2000.json \
+  --tag A1_512_baseline
+```
+
+---
+
+## 八、后续 Roadmap
+
+按优先级排列，详细技术方案见各节。
+
+| 优先级 | 模块 | 说明 | 依赖 |
+|--------|------|------|------|
+| P0 | GB 入库完成 | 主线阻塞项 | — |
+| P1 | 测试集生成 + 标注 | 依赖 GB 入库 | P0 |
+| P2 | RAPTOR 实现 | 论文亮点，解决多跳精度问题 | 独立可开始 |
+| P3 | V4 实验 8 组对比 | 核心方法论验证 | P1 + P2 |
+| P4a | Redis 查询缓存 | 同问题二次命中 3s → <100ms | — |
+| P4b | 前端 FC 开关 | SettingsPage 补 Function Calling toggle | — |
+| P4c | MCP HTTP/SSE 模式 | 当前仅 stdio | — |
+| P5 | Level 7c GraphRAG | 知识图谱检索，独立模块 | 独立可开始 |
+
+> 毕业论文策略详见 [docs/thesis_strategy.md](docs/thesis_strategy.md)
