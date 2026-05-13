@@ -2,6 +2,22 @@
 
 基于 MinerU + LangChain 的工业级检索增强生成系统，以加氢裂化工艺规程为核心实验数据集。
 
+## 实验规模
+
+本项目包含两个层次的系统性评估：
+
+**小规模消融实验**（加氢裂化工艺规程，~100 页）
+- 目标：在受控规模下对比单一变量（chunk_size / embedding 模型）的影响
+- 知识库规模：98～361 chunks，约 2～4 万 token
+- 评估方式：Hit@K（无 LLM 成本）+ RAGAS 四指标
+- 典型对比：chunk_size = 256 / 512 / 1024 token，bge-m3 vs qwen3-embedding
+
+**大规模总体测试**（GB/T 国标文档库，200+ PDF）
+- 目标：验证系统在真实生产规模下的检索与生成能力
+- 知识库规模：目标 8k～15k chunks，数十万 token
+- 评估方式：2000 条分类测试集（单跳 / 多跳 / 跨文档汇总），RAGAS 全量评估
+- 典型对比：Baseline（纯 Hybrid）/ RAPTOR 摘要树 / GraphRAG 知识图谱
+
 ## 技术栈
 
 | 层 | 技术 |
