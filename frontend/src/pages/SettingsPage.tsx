@@ -34,18 +34,18 @@ export default function SettingsPage({ settings, onUpdate, onReset }: Props) {
         {/* 流程控制 */}
         <div className="glass-card" style={{ padding: 24 }}>
           <SectionTitle>流程控制</SectionTitle>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
 
             <PipelineToggle
               label="BGE Reranker 精排"
-              hint="关闭后跳过精排，检索更快但精度下降"
+              hint="关闭后跳过精排，检索速度更快但排序精度下降"
               enabled={settings.rerankerEnabled}
               onChange={v => onUpdate({ rerankerEnabled: v })}
             />
 
             <PipelineToggle
               label="Fallback 兜底路由"
-              hint="知识库无结果时自动走 LLM / 网络搜索"
+              hint="知识库无结果时自动走 LLM 知识或网络搜索"
               enabled={settings.fallbackEnabled}
               onChange={v => onUpdate({ fallbackEnabled: v })}
             >
@@ -66,30 +66,20 @@ export default function SettingsPage({ settings, onUpdate, onReset }: Props) {
               )}
             </PipelineToggle>
 
-            <PipelineToggle
-              label="知识图谱检索"
-              hint="GraphRAG：实体关系图辅助检索"
-              enabled={false}
-              onChange={() => {}}
-              comingSoon
-            />
+          </div>
 
-            <PipelineToggle
-              label="RAPTOR 递归摘要"
-              hint="多层摘要树，增强长文档理解"
-              enabled={false}
-              onChange={() => {}}
-              comingSoon
-            />
-
-            <PipelineToggle
-              label="多路召回融合"
-              hint="Hybrid BM25 + Dense，关闭后仅用向量检索"
-              enabled={true}
-              onChange={() => {}}
-              comingSoon
-            />
-
+          {/* 常驻启用项说明 */}
+          <div style={{
+            padding: '10px 14px', borderRadius: 10,
+            background: 'rgba(90,170,76,0.04)',
+            border: '1px solid rgba(90,170,76,0.12)',
+            fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.7,
+          }}>
+            <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>常驻启用：</span>
+            混合检索（BM25 + Dense + RRF）· Query 改写 · 对话历史短期记忆
+            <br />
+            <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>对话内切换：</span>
+            多跳拆解 · 双语检索 · RAPTOR · 知识图谱 · GraphRAG（在聊天框输入区控制）
           </div>
         </div>
 

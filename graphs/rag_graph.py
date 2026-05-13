@@ -25,6 +25,7 @@ Level 7 — LangGraph 多步 RAG（含 Function Calling）
 """
 
 import sys
+import json
 sys.path.insert(0, "/home/hanyuu/rag_project")
 
 import re
@@ -48,6 +49,7 @@ MAX_RETRY = 2           # 最多改写查询并重试几次
 class RAGState(TypedDict):
     question: str           # 原始问题，全程不变
     query: str              # 当前检索用的 query（可能被改写）
+    history: List[dict]     # 对话历史 [{"role": "user"|"assistant", "content": "..."}]
     docs: List[Document]    # 精排后的 Top-N 文档
     scores: List[float]     # 精排分数列表
     answer: str             # 最终答案
@@ -70,6 +72,15 @@ class RAGState(TypedDict):
     cross_lingual_enabled: bool  # 是否启用跨语言检索
     translated_query: str        # 翻译后的 query（供前端显示）
     collection_name: str         # 当前检索的 collection 名（用于查找配对库）
+    # 高级检索模式（互斥，优先级：graphrag > kg > raptor > hybrid）
+    raptor_enabled: bool         # RAPTOR 层级摘要树检索
+    kg_enabled: bool             # 知识图谱实体扩展检索
+    graphrag_enabled: bool       # GraphRAG Local+Global 双路检索
+    # Query 拆解（多跳复杂问题）
+    decompose_enabled: bool      # 是否启用 query 拆解（默认 True）
+    sub_queries: List[str]       # 拆解后的子问题列表（供前端展示）
+    # 父子检索（仅对有 parent_chunk_id 元数据的库有效，旧库自动跳过）
+    parent_child_enabled: bool
     # 流式输出回调（token_callback(token: str) → None，None 时退化为批量模式）
     token_callback: Any
 
@@ -105,6 +116,28 @@ ROUTER_TOOL_PROMPT = ChatPromptTemplate.from_messages([
      "- direct_answer：直接回答问候、闲聊、通用常识问题，无需任何工具\n\n"
      "遇到专业性或查询类问题优先选 search_knowledge_base；"
      "涉及具体数值计算或趋势分析才选 analyze_process_data。"),
+    ("human", "{question}"),
+])
+
+CONDENSE_PROMPT = ChatPromptTemplate.from_messages([
+    ("system",
+     "根据对话历史和用户最新问题，将最新问题改写为一个无需上下文就能独立理解的问题。\n"
+     "如果最新问题本身已经完整清晰（不依赖历史），直接原文返回，不做任何修改。\n"
+     "只输出改写后的问题，不要任何解释或前缀。"),
+    ("human", "对话历史：\n{chat_history}\n\n最新问题：{question}"),
+])
+
+GENERATE_WITH_HISTORY_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", (
+        "你是一个专业的知识库问答助手。"
+        "请根据下方检索到的上下文回答用户问题。\n"
+        "要求：\n"
+        "- 只使用上下文中的信息作答，不要编造内容\n"
+        "- 如果上下文中没有相关信息，直接说'根据现有资料无法回答'\n"
+        "- 回答简洁、准确，必要时分点说明\n\n"
+        "【对话历史】\n{chat_history}\n\n"
+        "【参考文档】\n{context}"
+    )),
     ("human", "{question}"),
 ])
 
@@ -146,6 +179,34 @@ FALLBACK_PROMPT = ChatPromptTemplate.from_messages([
 
 
 # ── 节点函数 ───────────────────────────────────────────────────────────────
+
+def _format_history(history: List[dict], max_turns: int = 3) -> str:
+    """将历史消息格式化为文本，最多保留最近 max_turns 轮（2条/轮）"""
+    recent = history[-(max_turns * 2):]
+    lines = []
+    for msg in recent:
+        role = "用户" if msg.get("role") == "user" else "助手"
+        lines.append(f"{role}：{msg.get('content', '')}")
+    return "\n".join(lines)
+
+
+def condense_node(state: RAGState, llm=None) -> dict:
+    """
+    问题压缩节点：将追问改写为独立的完整问题，改善检索质量。
+    无对话历史时直接跳过（零开销）。
+    """
+    history = state.get("history") or []
+    if not history:
+        return {}
+    _llm = llm or get_llm()
+    chain = CONDENSE_PROMPT | _llm | StrOutputParser()
+    condensed = chain.invoke({
+        "chat_history": _format_history(history),
+        "question": state["question"],
+    }).strip()
+    # 只更新 query（用于检索），question 保持原始问题不变
+    return {"query": condensed}
+
 
 def router_node(state: RAGState, llm=None) -> dict:
     """
@@ -278,9 +339,35 @@ def retrieve_node(state: RAGState, hybrid_retriever=None, reranker=None, llm=Non
         docs = raw_docs
         scores = [1.0] * len(raw_docs)
 
+    # ── 父子检索：命中 child → 替换为 parent（context 更完整）────────────
+    # 无 parent_chunk_id 的旧库 chunk 直接跳过，不报错
+    if state.get("parent_child_enabled", False) and chunk_lookup:
+        seen_pids: set = set()
+        new_docs: List[Document] = []
+        new_scores: List[float] = []
+        for doc, score in zip(docs, scores):
+            pid = doc.metadata.get("parent_chunk_id", "")
+            if pid:
+                if pid not in seen_pids:
+                    parent = chunk_lookup.get(pid)
+                    if parent:
+                        new_docs.append(parent)
+                        new_scores.append(score)
+                        seen_pids.add(pid)
+                    else:
+                        # parent 未在 lookup 中（异常情况），保留 child
+                        new_docs.append(doc)
+                        new_scores.append(score)
+            else:
+                # 旧库 chunk（无 parent_chunk_id），直接保留
+                new_docs.append(doc)
+                new_scores.append(score)
+        if new_docs:
+            docs, scores = new_docs, new_scores
+
     # ── 邻居扩展：用 prev/next_chunk_id 补充上下文 ────────────────────────
-    # 解决"检索到半截"问题：召回的 chunk 前后各扩展一个，帮助多跳推理
-    if chunk_lookup:
+    # 父子模式已替换为 parent，邻居扩展在 parent 模式下跳过（避免噪声）
+    elif chunk_lookup:
         seen_ids = {d.metadata.get("chunk_id") for d in docs if d.metadata.get("chunk_id")}
         extra = []
         for doc in docs:
@@ -291,7 +378,6 @@ def retrieve_node(state: RAGState, hybrid_retriever=None, reranker=None, llm=Non
                     if neighbor:
                         extra.append(neighbor)
                         seen_ids.add(neighbor_id)
-        # 邻居追加在后面，不影响原有排序和分数
         docs = docs + extra
         scores = scores + [0.0] * len(extra)
 
@@ -328,22 +414,51 @@ def _stream_or_invoke(prompt, llm, inputs: dict, callback) -> str:
 
 
 def generate_node(state: RAGState, llm=None) -> dict:
-    """用精排后的文档生成最终答案"""
+    """用精排后的文档生成最终答案，有对话历史时带入上下文"""
     _llm = llm or get_llm()
     cb = state.get("token_callback")
-    answer = _stream_or_invoke(
-        RAG_PROMPT, _llm,
-        {"context": format_docs(state["docs"]), "question": state["question"]},
-        cb,
-    )
+    history = state.get("history") or []
+    if history:
+        answer = _stream_or_invoke(
+            GENERATE_WITH_HISTORY_PROMPT, _llm,
+            {
+                "context": format_docs(state["docs"]),
+                "question": state["question"],
+                "chat_history": _format_history(history),
+            },
+            cb,
+        )
+    else:
+        answer = _stream_or_invoke(
+            RAG_PROMPT, _llm,
+            {"context": format_docs(state["docs"]), "question": state["question"]},
+            cb,
+        )
     return {"answer": answer}
 
 
 def direct_node(state: RAGState, llm=None) -> dict:
-    """无需检索，直接回答"""
+    """无需检索，直接回答，有对话历史时带入上下文"""
     _llm = llm or get_llm()
     cb = state.get("token_callback")
-    answer = _stream_or_invoke(DIRECT_PROMPT, _llm, {"question": state["question"]}, cb)
+    history = state.get("history") or []
+    if history:
+        history_prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             "你是一个智能助手，请直接、简洁地回答用户的问题。\n\n"
+             "注意：本系统基于 RAG（检索增强生成），每次只检索少量相关文档片段（Top-K）。"
+             "如果用户询问「共有多少条记录」「列出所有XX」等需要遍历全库的问题，"
+             "请明确告知系统无法统计全量数据，只能回答关于具体内容的问题。\n\n"
+             "【对话历史】\n{chat_history}"),
+            ("human", "{question}"),
+        ])
+        answer = _stream_or_invoke(
+            history_prompt, _llm,
+            {"question": state["question"], "chat_history": _format_history(history)},
+            cb,
+        )
+    else:
+        answer = _stream_or_invoke(DIRECT_PROMPT, _llm, {"question": state["question"]}, cb)
     return {"answer": answer}
 
 
@@ -431,6 +546,100 @@ def tool_executor_node(state: RAGState, llm=None) -> dict:
     return {"answer": f"未知工具：{tool_name}", "tool_result": ""}
 
 
+# ── Query 拆解节点 ─────────────────────────────────────────────────────────
+
+DECOMPOSE_PROMPT = ChatPromptTemplate.from_messages([
+    ("system",
+     "判断以下问题是否是需要分解成多个子问题才能完整回答的复杂问题。\n\n"
+     "【复杂问题特征】满足任意一条即判定为复杂：\n"
+     "- 涉及两个或以上独立话题/实体，需分别查找再对比综合\n"
+     "  （例：'A和B有什么区别'、'X规定和Y操作是否矛盾'）\n"
+     "- 需要先获取某个结论，再用该结论查询另一件事（多跳推理）\n"
+     "  （例：'投诉最多的问题，和产品路线有没有冲突'）\n"
+     "- 问题中含有明确的对比/关联词：对比、区别、矛盾、冲突、关系、影响、差异\n\n"
+     "【简单问题特征】下列情况不要拆解：\n"
+     "- 单一事实查询（某参数是多少、某规程是什么）\n"
+     "- 虽然较长但只围绕一个核心问题\n\n"
+     "输出严格 JSON，不要任何解释：\n"
+     "不需拆解：{{\"is_complex\": false, \"sub_queries\": [\"原问题\"]}}\n"
+     "需要拆解：{{\"is_complex\": true, \"sub_queries\": [\"子问题1\", \"子问题2\"]}}"),
+    ("human", "问题：{question}"),
+])
+
+
+def decompose_node(state: RAGState, hybrid_retriever=None, reranker=None, llm=None) -> dict:
+    """
+    Query 拆解节点。
+
+    decompose_enabled=False 或判断为简单问题时：原样传递，后续走 retrieve_node。
+    判断为复杂问题时：拆分为子问题分别检索，RRF 合并后精排，直接填充 docs/scores，
+    后续跳过 retrieve_node 直接进入 evaluate_decision。
+    """
+    if not state.get("decompose_enabled", True):
+        return {"sub_queries": [], "decompose_route": "retrieve"}
+
+    _llm = llm or get_llm()
+    question = state.get("query") or state["question"]
+
+    # ── LLM 判断是否需要拆解 ───────────────────────────────────────────────
+    try:
+        raw = (_llm | StrOutputParser()).invoke(
+            DECOMPOSE_PROMPT.format_messages(question=question)
+        )
+        # 提取 JSON（有时 LLM 会在 JSON 外包一段说明文字）
+        import re as _re
+        match = _re.search(r'\{.*\}', raw, _re.DOTALL)
+        parsed = json.loads(match.group()) if match else {}
+        is_complex = parsed.get("is_complex", False)
+        sub_queries = parsed.get("sub_queries", [question])
+    except Exception as e:
+        print(f"[decompose] 判断失败，降级为单 query：{e}")
+        return {"sub_queries": [], "decompose_route": "retrieve"}
+
+    if not is_complex or len(sub_queries) <= 1:
+        return {"sub_queries": [], "decompose_route": "retrieve"}
+
+    print(f"[decompose] 拆解为 {len(sub_queries)} 个子问题：{sub_queries}")
+
+    # ── 多路检索 ───────────────────────────────────────────────────────────
+    all_docs: List[Document] = []
+    seen_keys: set = set()
+    for sq in sub_queries:
+        try:
+            docs = hybrid_retriever.invoke(sq)
+            for d in docs:
+                key = d.page_content[:80]
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    all_docs.append(d)
+        except Exception as e:
+            print(f"[decompose] 子 query '{sq}' 检索失败：{e}")
+
+    if not all_docs:
+        return {"sub_queries": sub_queries, "decompose_route": "retrieve"}
+
+    # ── Reranker 精排（用原始问题打分）────────────────────────────────────
+    if state.get("reranker_enabled", True) and reranker and all_docs:
+        scored = reranker.rerank(question, all_docs)
+        docs = [doc for _, doc in scored]
+        scores = [round(s, 3) for s, _ in scored]
+    else:
+        docs = all_docs
+        scores = [1.0] * len(all_docs)
+
+    return {
+        "docs": docs,
+        "scores": scores,
+        "sub_queries": sub_queries,
+        "decompose_route": "generate",   # 已有 docs，跳过 retrieve_node
+    }
+
+
+def decompose_decision(state: RAGState) -> str:
+    """decompose_node 之后的路由：已拆解 → generate；未拆解 → retrieve"""
+    return state.get("decompose_route", "retrieve")
+
+
 # ── 条件边函数 ─────────────────────────────────────────────────────────────
 
 def route_decision(state: RAGState) -> str:
@@ -476,7 +685,9 @@ def build_rag_graph(hybrid_retriever, reranker, llm=None, chunk_lookup: dict = N
 
     # 把外部依赖绑定到节点函数
     from functools import partial
+    _condense      = partial(condense_node,      llm=_llm)
     _router        = partial(router_node,        llm=_llm)
+    _decompose     = partial(decompose_node,     hybrid_retriever=hybrid_retriever, reranker=reranker, llm=_llm)
     _retrieve      = partial(retrieve_node,      hybrid_retriever=hybrid_retriever, reranker=reranker, llm=_llm, chunk_lookup=chunk_lookup)
     _rewrite       = partial(rewrite_node,       llm=_llm)
     _generate      = partial(generate_node,      llm=_llm)
@@ -486,7 +697,9 @@ def build_rag_graph(hybrid_retriever, reranker, llm=None, chunk_lookup: dict = N
 
     builder = StateGraph(RAGState)
 
+    builder.add_node("condense",      _condense)
     builder.add_node("router",        _router)
+    builder.add_node("decompose",     _decompose)
     builder.add_node("retrieve",      _retrieve)
     builder.add_node("rewrite",       _rewrite)
     builder.add_node("generate",      _generate)
@@ -494,10 +707,17 @@ def build_rag_graph(hybrid_retriever, reranker, llm=None, chunk_lookup: dict = N
     builder.add_node("fallback",      _fallback)
     builder.add_node("tool_executor", _tool_executor)
 
-    builder.add_edge(START, "router")
+    builder.add_edge(START, "condense")
+    builder.add_edge("condense", "router")
     builder.add_conditional_edges(
         "router", route_decision,
-        {"retrieve": "retrieve", "direct": "direct", "tool": "tool_executor"},
+        # retrieve 路由先经过 decompose，其他路由不变
+        {"retrieve": "decompose", "direct": "direct", "tool": "tool_executor"},
+    )
+    builder.add_conditional_edges(
+        "decompose", decompose_decision,
+        # 未拆解 → retrieve（正常流程）；已拆解 → generate（docs 已填充）
+        {"retrieve": "retrieve", "generate": "generate"},
     )
     builder.add_conditional_edges(
         "retrieve", evaluate_decision,

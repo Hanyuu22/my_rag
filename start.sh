@@ -31,7 +31,7 @@ done
 if redis-cli ping > /dev/null 2>&1; then
     echo -e "${GREEN}[✓] Redis 已运行${NC}"
 else
-    sudo service redis-server start > /dev/null 2>&1
+    redis-server --daemonize yes --logfile /tmp/redis.log > /dev/null 2>&1
     if redis-cli ping > /dev/null 2>&1; then
         echo -e "${GREEN}[✓] Redis 已启动${NC}"
     else

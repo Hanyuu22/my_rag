@@ -39,10 +39,14 @@ from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.run_config import RunConfig
 
 
+METRIC_KEYS = ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
+
+
 def run_ragas(
     samples: List[Dict[str, Any]],
     show_progress: bool = True,
-) -> Dict[str, float]:
+    return_per_sample: bool = False,
+) -> Dict[str, Any]:
     """
     对一批样本运行 RAGAS 四指标评估。
 
@@ -53,14 +57,19 @@ def run_ragas(
             - contexts (List[str]): 检索到的 context 文本列表
             - reference (str): ground truth 参考答案
         show_progress: 是否显示进度条
+        return_per_sample: 为 True 时额外返回 per_sample 字段（每道题的逐条分数列表）
 
     Returns:
-        四个指标均值的 dict
+        四个指标均值的 dict；若 return_per_sample=True，额外包含
+        "per_sample": {"faithfulness": [...], ...}
     """
     from chains.rag_chain import get_llm, get_embeddings
 
     ragas_llm = LangchainLLMWrapper(get_llm())
     ragas_emb = LangchainEmbeddingsWrapper(get_embeddings())
+
+    # strictness=1：每道题只生成 1 次，避免 DashScope 不支持 n>1 导致的大量警告
+    answer_relevancy.strictness = 1
 
     metrics = [faithfulness, answer_relevancy, context_precision, context_recall]
 
@@ -77,7 +86,7 @@ def run_ragas(
     dataset = EvaluationDataset(samples=eval_samples)
 
     run_config = RunConfig(
-        timeout=120,       # 单个评估任务超时秒数（默认 60s，DashScope 有时较慢）
+        timeout=120,
         max_retries=2,
         max_wait=30,
     )
@@ -92,14 +101,52 @@ def run_ragas(
         run_config=run_config,
     )
 
-    # result[key] 返回每个样本的分数列表，取均值
+    per_sample = {}
     scores = {}
-    for key in ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]:
+    for key in METRIC_KEYS:
         try:
-            vals = result[key]  # List[float]，NaN 表示该样本评估失败
+            vals = [float(v) for v in result[key]]
+            per_sample[key] = vals
             mean = float(np.nanmean(vals))
             scores[key] = round(mean, 4) if not np.isnan(mean) else None
         except (KeyError, Exception):
+            per_sample[key] = []
             scores[key] = None
 
+    if return_per_sample:
+        scores["per_sample"] = per_sample
     return scores
+
+
+def aggregate_group_scores(
+    samples: List[Dict[str, Any]],
+    per_sample: Dict[str, List[float]],
+    group_key: str,
+) -> Dict[str, Dict]:
+    """
+    从已有的逐条分数按 group_key 分组聚合，不再重复调用 LLM。
+
+    Args:
+        samples: 与 run_ragas 传入相同的样本列表（含 group_key 字段）
+        per_sample: run_ragas 返回的 per_sample 字典
+        group_key: 分组字段名，如 "question_type"
+
+    Returns:
+        {group_name: {"n": int, "faithfulness": float, ...}}
+    """
+    from collections import defaultdict
+
+    group_indices: Dict[str, List[int]] = defaultdict(list)
+    for i, s in enumerate(samples):
+        group_indices[s.get(group_key, "unknown")].append(i)
+
+    result = {}
+    for gname, indices in sorted(group_indices.items()):
+        group_scores = {}
+        for key in METRIC_KEYS:
+            vals_all = per_sample.get(key, [])
+            vals = [vals_all[i] for i in indices if i < len(vals_all)]
+            mean = float(np.nanmean(vals)) if vals else float("nan")
+            group_scores[key] = round(mean, 4) if not np.isnan(mean) else None
+        result[gname] = {"n": len(indices), **group_scores}
+    return result

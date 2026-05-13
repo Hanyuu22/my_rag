@@ -43,6 +43,7 @@ def process_file(
     use_vlm_ocr: bool = True,
     progress_callback: Callable[[str, int], None] = None,
     embedding_model: str = None,
+    use_parent_child: bool = False,
 ) -> dict:
     """
     统一处理入口，根据文件类型自动分发。
@@ -66,16 +67,16 @@ def process_file(
     lang = "en" if collection_name.endswith("_en") else "ch"
 
     if suffix in (".pdf",):
-        return _process_pdf(path, collection_name, use_vlm_ocr, report, lang, embedding_model)
+        return _process_pdf(path, collection_name, use_vlm_ocr, report, lang, embedding_model, use_parent_child)
     elif suffix in (".doc", ".docx"):
-        return _process_word(path, collection_name, use_vlm_ocr, report, lang, embedding_model)
+        return _process_word(path, collection_name, use_vlm_ocr, report, lang, embedding_model, use_parent_child)
     elif suffix in (".xlsx", ".xls"):
         return _process_excel(path, collection_name, report, embedding_model)
     else:
         raise ValueError(f"不支持的文件格式：{suffix}，支持 PDF / Word / Excel")
 
 
-def _process_pdf(path: Path, collection_name: str, use_vlm_ocr: bool, report, lang: str = "ch", embedding_model: str = None):
+def _process_pdf(path: Path, collection_name: str, use_vlm_ocr: bool, report, lang: str = "ch", embedding_model: str = None, use_parent_child: bool = False):
     from loaders.mineru_loader import MinerULoader
     from splitters.markdown_splitter import split_documents
     from chains.rag_chain import build_vectorstore
@@ -123,8 +124,13 @@ def _process_pdf(path: Path, collection_name: str, use_vlm_ocr: bool, report, la
     # Step 3: 切分
     report("文本切分中...", 78)
     docs = MinerULoader(str(content_list_path), source_name=path.stem).load()
-    chunks = split_documents(docs)
-    report("文本切分完成", 82)
+    if use_parent_child:
+        from splitters.markdown_splitter import split_documents_with_parents
+        chunks = split_documents_with_parents(docs)
+        report("文本切分完成（父子模式）", 82)
+    else:
+        chunks = split_documents(docs)
+        report("文本切分完成", 82)
 
     # Step 4: 入库（追加模式，多文件安全）
     report("向量化入库中...", 85)
@@ -143,7 +149,7 @@ def _process_pdf(path: Path, collection_name: str, use_vlm_ocr: bool, report, la
     return {"chunks": len(chunks), "collection": collection_name}
 
 
-def _process_word(path: Path, collection_name: str, use_vlm_ocr: bool, report, lang: str = "ch", embedding_model: str = None):
+def _process_word(path: Path, collection_name: str, use_vlm_ocr: bool, report, lang: str = "ch", embedding_model: str = None, use_parent_child: bool = False):
     from loaders.word_loader import doc_to_pdf, run_mineru
     from loaders.mineru_loader import MinerULoader
     from splitters.markdown_splitter import split_documents
@@ -182,8 +188,13 @@ def _process_word(path: Path, collection_name: str, use_vlm_ocr: bool, report, l
     # Step 4: 切分
     report("文本切分中...", 80)
     docs = MinerULoader(str(content_list_path), source_name=path.stem).load()
-    chunks = split_documents(docs)
-    report("文本切分完成", 85)
+    if use_parent_child:
+        from splitters.markdown_splitter import split_documents_with_parents
+        chunks = split_documents_with_parents(docs)
+        report("文本切分完成（父子模式）", 85)
+    else:
+        chunks = split_documents(docs)
+        report("文本切分完成", 85)
 
     # Step 5: 入库（追加模式，多文件安全）
     report("向量化入库中...", 88)

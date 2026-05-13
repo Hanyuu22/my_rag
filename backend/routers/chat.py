@@ -6,6 +6,7 @@ POST /api/chat   发送问题，SSE 流式返回路由状态 + 答案 + 来源
 
 import sys
 import json
+import hashlib
 import asyncio
 from collections import OrderedDict
 sys.path.insert(0, "/home/hanyuu/rag_project")
@@ -26,6 +27,7 @@ class ChatRequest(BaseModel):
     question: str
     collection: str
     extra_collections: list = []    # 辅助库列表，为空时走单库逻辑
+    history: list = []              # 对话历史 [{"role": "user"|"assistant", "content": "..."}]
     # 检索/生成参数
     retriever_top_k: int = 10
     reranker_top_n: int = 3
@@ -38,10 +40,20 @@ class ChatRequest(BaseModel):
     fallback_method: str = 'auto'   # 'auto' | 'llm' | 'web'
     tools_enabled: bool = False     # 是否启用 Function Calling 工具路由
     cross_lingual_enabled: bool = False  # 是否启用双语 query 跨语言检索
+    # 高级检索模式（互斥，优先级：graphrag > kg > raptor > hybrid）
+    raptor_enabled: bool = False         # RAPTOR 层级摘要树
+    kg_enabled: bool = False             # 知识图谱实体扩展
+    graphrag_enabled: bool = False       # GraphRAG Local+Global 双路
+    # Query 拆解（多跳复杂问题，默认开启）
+    decompose_enabled: bool = True
+    # 父子检索（仅对以父子模式入库的库有效，旧库自动跳过）
+    parent_child_enabled: bool = False
 
 
 def _build_graph(collection_name: str, extra_collections: list = None,
-                 top_k: int = 10, reranker_top_n: int = 3, temperature: float = 0.1):
+                 top_k: int = 10, reranker_top_n: int = 3, temperature: float = 0.1,
+                 raptor_enabled: bool = False, kg_enabled: bool = False,
+                 graphrag_enabled: bool = False):
     """构建并缓存 RAG graph，支持单库和多库两种模式"""
     from config import CHROMA_PERSIST_DIR, DASHSCOPE_API_KEY, DASHSCOPE_BASE_URL, LLM_MODEL
     from chains.rag_chain import get_embeddings, get_collection_embedding_model
@@ -72,19 +84,63 @@ def _build_graph(collection_name: str, extra_collections: list = None,
             Document(page_content=doc, metadata=meta)
             for doc, meta in zip(results["documents"], results["metadatas"])
         ]
-        hybrid_retriever = build_hybrid_retriever(chunks, vectorstore, k=top_k)
+        hybrid_retriever = build_hybrid_retriever(chunks, vectorstore, k=top_k,
+                                                   collection_name=collection_name)
 
-    # chunk_lookup：{chunk_id → Document}，用于 retrieve_node 邻居扩展
-    # 多库模式下 chunks 来自多个库，合并后统一建 lookup
+    # chunk_lookup：{chunk_id → Document}，用于 retrieve_node 邻居扩展 + 父子检索
     chunk_lookup = {
         c.metadata["chunk_id"]: c
         for c in chunks
         if c.metadata.get("chunk_id")
     }
 
+    # 如果库是以父子模式入库的（child 有 parent_chunk_id），动态重建 parent doc
+    # parent doc 以 parent_chunk_id 为 key 加入 chunk_lookup，retrieve_node 直接按 key 查找
+    _has_parents = any(c.metadata.get("parent_chunk_id") for c in chunks)
+    if _has_parents:
+        from collections import defaultdict
+        _groups: dict = defaultdict(list)
+        for c in chunks:
+            pid = c.metadata.get("parent_chunk_id", "")
+            if pid:
+                _groups[pid].append(c)
+        for pid, children in _groups.items():
+            sorted_children = sorted(children, key=lambda c: c.metadata.get("chunk_index", 0))
+            combined = "\n\n".join(c.page_content for c in sorted_children)
+            meta = {**sorted_children[0].metadata, "chunk_id": pid, "chunk_type": "parent"}
+            meta.pop("chunk_index", None)
+            from langchain_core.documents import Document as _Doc
+            chunk_lookup[pid] = _Doc(page_content=combined, metadata=meta)
+        print(f"[parent_child] 重建 {len(_groups)} 个 parent chunk")
+
     reranker = get_reranker(top_n=reranker_top_n)
     llm = ChatOpenAI(model=LLM_MODEL, temperature=temperature,
                      api_key=DASHSCOPE_API_KEY, base_url=DASHSCOPE_BASE_URL)
+
+    # 高级检索模式（优先级：graphrag > kg > raptor > hybrid）
+    if graphrag_enabled:
+        from retrievers.graphrag_retriever import GraphRAGRetriever
+        emb_model = get_collection_embedding_model(collection_name)
+        embeddings = get_embeddings(emb_model)
+        hybrid_retriever = GraphRAGRetriever(
+            collection_name, chunks, hybrid_retriever, embeddings, llm, top_k=top_k
+        )
+        print(f"[chat] 使用 GraphRAG 检索器")
+    elif kg_enabled:
+        from retrievers.kg_retriever import KGRetriever
+        hybrid_retriever = KGRetriever(
+            collection_name, chunks, hybrid_retriever, llm, top_k=top_k
+        )
+        print(f"[chat] 使用 KG 检索器")
+    elif raptor_enabled:
+        from retrievers.raptor_retriever import RaptorRetriever
+        emb_model = get_collection_embedding_model(collection_name)
+        embeddings = get_embeddings(emb_model)
+        hybrid_retriever = RaptorRetriever(
+            collection_name, chunks, hybrid_retriever, embeddings, llm, top_k=top_k
+        )
+        print(f"[chat] 使用 RAPTOR 检索器")
+
     return build_rag_graph(hybrid_retriever, reranker, llm, chunk_lookup=chunk_lookup)
 
 
@@ -96,6 +152,9 @@ def _get_or_build_graph(req: ChatRequest):
         req.retriever_top_k,
         req.reranker_top_n,
         req.temperature,
+        req.raptor_enabled,
+        req.kg_enabled,
+        req.graphrag_enabled,
     )
     if cache_key not in _graph_cache:
         # LRU 驱逐：超出上限时弹出最早未用的条目
@@ -105,6 +164,9 @@ def _get_or_build_graph(req: ChatRequest):
         _graph_cache[cache_key] = _build_graph(
             req.collection, req.extra_collections,
             req.retriever_top_k, req.reranker_top_n, req.temperature,
+            raptor_enabled=req.raptor_enabled,
+            kg_enabled=req.kg_enabled,
+            graphrag_enabled=req.graphrag_enabled,
         )
     else:
         # 命中缓存：移到末尾（最近使用）
@@ -150,6 +212,28 @@ async def chat(req: ChatRequest):
                 yield send({"type": "error", "content": f"知识库 '{req.collection}' 不存在"})
                 return
 
+            # ── 查询结果缓存（Redis）────────────────────────────────────────
+            # key = md5(question + collection)，TTL 1h
+            # 命中缓存时跳过 graph 执行，直接回放缓存结果（无流式）
+            _cache_key = None
+            try:
+                from backend.redis_client import get_redis
+                _r = get_redis()
+                _cache_raw = hashlib.md5(
+                    f"{req.question}||{req.collection}".encode()
+                ).hexdigest()
+                _cache_key = f"qcache:{_cache_raw}"
+                _cached = _r.get(_cache_key)
+                if _cached:
+                    cached_result = json.loads(_cached)
+                    yield send({"type": "answer", "content": cached_result["answer"]})
+                    if cached_result.get("sources"):
+                        yield send({"type": "sources", "content": cached_result["sources"]})
+                    yield send({"type": "done"})
+                    return
+            except Exception:
+                _cache_key = None  # Redis 不可用时静默跳过，不影响正常流程
+
             yield send({"type": "status", "content": "正在初始化..."})
 
             # ── 流式透传：asyncio.Queue 桥接后台线程与 SSE ────────────────
@@ -181,6 +265,9 @@ async def chat(req: ChatRequest):
                 return
 
             yield send({"type": "status", "content": f"路由：{result['route']}"})
+            # 如果触发了 query 拆解，把子问题发给前端展示
+            if result.get("sub_queries"):
+                yield send({"type": "sub_queries", "content": result["sub_queries"]})
             # answer_token 已流式发出；这里补发完整答案供不支持流式的客户端
             yield send({"type": "answer", "content": result["answer"]})
 
@@ -199,6 +286,18 @@ async def chat(req: ChatRequest):
 
             if result.get("sources"):
                 yield send({"type": "sources", "content": result["sources"]})
+
+            # ── 写查询结果缓存（仅普通检索路由，fallback 不缓存） ──────────
+            if _cache_key and result.get("answer") and not result.get("fallback_type"):
+                try:
+                    from backend.redis_client import get_redis
+                    _r = get_redis()
+                    _r.set(_cache_key, json.dumps({
+                        "answer": result["answer"],
+                        "sources": result.get("sources", []),
+                    }, ensure_ascii=False), ex=3600)  # TTL 1小时
+                except Exception:
+                    pass  # 写缓存失败不影响正常返回
 
             yield send({"type": "done"})
 
@@ -220,6 +319,7 @@ def _run_graph(req: ChatRequest, token_callback=None) -> dict:
         graph = _get_or_build_graph(req)
         result = graph.invoke({
             "question": req.question,
+            "history": req.history[-6:],  # 最多传最近 3 轮（6 条消息）
             "score_threshold": req.score_threshold,
             "max_retry_limit": req.max_retry,
             "reranker_enabled": req.reranker_enabled,
@@ -228,6 +328,11 @@ def _run_graph(req: ChatRequest, token_callback=None) -> dict:
             "tools_enabled": req.tools_enabled,
             "cross_lingual_enabled": req.cross_lingual_enabled,
             "collection_name": req.collection,
+            "raptor_enabled": req.raptor_enabled,
+            "kg_enabled": req.kg_enabled,
+            "graphrag_enabled": req.graphrag_enabled,
+            "decompose_enabled": req.decompose_enabled,
+            "parent_child_enabled": req.parent_child_enabled,
             "token_callback": token_callback,
         })
 

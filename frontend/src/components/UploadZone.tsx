@@ -26,7 +26,8 @@ export default function UploadZone({ onUploaded }: UploadZoneProps) {
   const [showModal, setShowModal]           = useState(false)
   const [pendingFiles, setPendingFiles]     = useState<File[]>([])
   const [collectionName, setCollectionName] = useState('')
-  const [useVlmOcr, setUseVlmOcr]         = useState(false)
+  const [useVlmOcr, setUseVlmOcr]           = useState(false)
+  const [useParentChild, setUseParentChild] = useState(false)
   const [embeddingModel, setEmbeddingModel] = useState('BAAI/bge-large-zh-v1.5')
   const [tasks, setTasks]                   = useState<TaskState[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -79,6 +80,7 @@ export default function UploadZone({ onUploaded }: UploadZoneProps) {
       formData.append('collection_name', collectionName.trim())
       formData.append('use_vlm_ocr', String(useVlmOcr))
       formData.append('embedding_model', embeddingModel)
+      formData.append('use_parent_child', String(useParentChild))
 
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: formData })
@@ -258,7 +260,7 @@ export default function UploadZone({ onUploaded }: UploadZoneProps) {
             </div>
 
             {/* VLM OCR */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, cursor: 'pointer' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
               <input
                 type="checkbox" checked={useVlmOcr}
                 onChange={e => setUseVlmOcr(e.target.checked)}
@@ -267,6 +269,23 @@ export default function UploadZone({ onUploaded }: UploadZoneProps) {
               <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                 启用 VLM 表格 OCR（识别图片表格，消耗 API）
               </span>
+            </label>
+
+            {/* 父子切分 */}
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 20, marginTop: 10, cursor: 'pointer' }}>
+              <input
+                type="checkbox" checked={useParentChild}
+                onChange={e => setUseParentChild(e.target.checked)}
+                style={{ width: 'auto', cursor: 'pointer', marginTop: 2 }}
+              />
+              <div>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  启用父子切分（推荐新库使用）
+                </span>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>
+                  小 chunk 用于精准检索，大 chunk（整节）送入 LLM，改善并列定义、步骤列表等被截断的问题
+                </div>
+              </div>
             </label>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>

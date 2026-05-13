@@ -5,12 +5,12 @@ interface Collection { name: string; count: number; embedding_model?: string }
 interface Props {
   selected: string
   onSelect: (name: string) => void
-  extraSelected: string[]
-  onExtraSelect: (names: string[]) => void
+  extraSelected?: string[]
+  onExtraSelect?: (names: string[]) => void
   refreshTrigger: number
 }
 
-export default function CollectionList({ selected, onSelect, extraSelected, onExtraSelect, refreshTrigger }: Props) {
+export default function CollectionList({ selected, onSelect, extraSelected = [], onExtraSelect, refreshTrigger }: Props) {
   const [collections, setCollections] = useState<Collection[]>([])
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -68,7 +68,7 @@ export default function CollectionList({ selected, onSelect, extraSelected, onEx
 
             const toggleExtra = (e: React.MouseEvent) => {
               e.stopPropagation()
-              if (isPrimary) return
+              if (isPrimary || !onExtraSelect) return
               onExtraSelect(
                 isExtra
                   ? extraSelected.filter(n => n !== col.name)
@@ -113,16 +113,18 @@ export default function CollectionList({ selected, onSelect, extraSelected, onEx
                     </span>
                   )}
                   <span className="badge badge-dim">{col.count} chunks</span>
-                  {/* 附加库勾选框（主库禁用） */}
-                  <input
-                    type="checkbox"
-                    checked={isExtra}
-                    disabled={isPrimary}
-                    title={isPrimary ? '当前主库' : (isExtra ? '取消并行检索' : '加入并行检索')}
-                    onChange={() => {}}
-                    onClick={toggleExtra}
-                    style={{ cursor: isPrimary ? 'not-allowed' : 'pointer', opacity: isPrimary ? 0.3 : 0.8 }}
-                  />
+                  {/* 附加库勾选框（仅在有 onExtraSelect 时显示，即问答页） */}
+                  {onExtraSelect && (
+                    <input
+                      type="checkbox"
+                      checked={isExtra}
+                      disabled={isPrimary}
+                      title={isPrimary ? '当前主库' : (isExtra ? '取消并行检索' : '加入并行检索')}
+                      onChange={() => {}}
+                      onClick={toggleExtra}
+                      style={{ cursor: isPrimary ? 'not-allowed' : 'pointer', opacity: isPrimary ? 0.3 : 0.8 }}
+                    />
+                  )}
                   <button
                     className="btn-danger"
                     style={{ padding: '2px 6px' }}

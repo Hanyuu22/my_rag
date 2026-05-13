@@ -25,7 +25,7 @@ MAX_FILE_SIZE = 300 * 1024 * 1024  # 300MB
 
 
 def _run_pipeline(task_id: str, file_path: str, collection_name: str,
-                  use_vlm_ocr: bool, embedding_model: str = None):
+                  use_vlm_ocr: bool, embedding_model: str = None, use_parent_child: bool = False):
     """在后台线程中运行处理流水线，进度写入 Redis"""
     task_update(task_id, status="processing", percent=0, step="初始化...")
 
@@ -40,6 +40,7 @@ def _run_pipeline(task_id: str, file_path: str, collection_name: str,
             use_vlm_ocr=use_vlm_ocr,
             progress_callback=on_progress,
             embedding_model=embedding_model,
+            use_parent_child=use_parent_child,
         )
         task_update(task_id, status="done", percent=100, step="处理完成", result=result)
     except Exception as e:
@@ -57,6 +58,7 @@ async def upload_file(
     collection_name: str = Form(...),
     use_vlm_ocr: bool = Form(False),
     embedding_model: str = Form("BAAI/bge-large-zh-v1.5"),
+    use_parent_child: bool = Form(False),
 ):
     """
     上传文件并触发后台处理。
@@ -108,7 +110,7 @@ async def upload_file(
     # 启动后台线程
     threading.Thread(
         target=_run_pipeline,
-        args=(task_id, str(save_path), collection_name, use_vlm_ocr, embedding_model),
+        args=(task_id, str(save_path), collection_name, use_vlm_ocr, embedding_model, use_parent_child),
         daemon=True,
     ).start()
 

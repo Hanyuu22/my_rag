@@ -129,7 +129,7 @@ LangGraph 在链路之上加流程调度：
 | 角色 | 模型 | 运行方式 |
 |------|------|----------|
 | PDF 解析 | MinerU pipeline | 本地，一次性离线 |
-| Embedding | bge-large-zh-v1.5 | 本地 GPU（CUDA） |
+| Embedding | **bge-m3**（主力，8192 token，中英双语） | 本地 GPU（CUDA），~2.3GB VRAM |
 | Reranker | bge-reranker-v2-m3 | 本地 GPU |
 | 生成 LLM | qwen-plus | DashScope API |
 | 评估 LLM | qwen-plus | DashScope API（复用 key） |
@@ -496,6 +496,66 @@ python ~/rag_project/mcp_server/server.py   # stdio 模式（Claude Desktop）
 
 ---
 
+### ✅ 工程优化3 — Embedding 模型升级 + Token 切分 + chunk_size 消融实验（2026-05）
+
+**主线：从 bge-large-zh-v1.5 迁移到 bge-m3**
+
+| 维度 | bge-large-zh-v1.5（旧） | bge-m3（新） |
+|------|------------------------|-------------|
+| 最大 token 数 | **512**（中文约 256 字） | **8192** |
+| 语言 | 纯中文 | 100+ 语言 |
+| 向量维度 | 1024 | 1024 |
+| VRAM | ~1.8GB | ~2.3GB |
+
+旧库 chunk_size=1024 字符实际上已被 Embedding 截断（仅嵌入前 512 token），是隐蔽的精度损失。
+
+**切分器改造（`splitters/markdown_splitter.py`）**
+
+用 `transformers.AutoTokenizer` 替换 `len()` 作为长度函数，所有切分逻辑统一以 token 数为单位：
+- `RecursiveCharacterTextSplitter(length_function=_token_len)`
+- `_greedy_accumulate`：`_token_len(chunk.page_content)` 控制合并阈值
+- `_merge_short_chunks`：同样改为 token 计数
+
+**chunk_size 消融实验（加氢裂化工艺规程）**
+
+三组知识库（全部 bge-m3 嵌入）：
+- `hydro_crack_256`：361 chunks，中位 194 token，avg 180，max 720
+- `hydro_crack`（512）：178 chunks，中位 413 token，avg 362，max 720
+- `hydro_crack_1024`：98 chunks，中位 788 token，avg 659，max 1004
+
+QA 数据集：`data/qa_dataset/hydro_crack_qa.json`（286题，从 hydro_crack 512库的 chunks 生成）
+
+标注文件：
+- `hydro_crack_qa_annotated.json`（512库精确标注，286题）
+- `hydro_crack_256_annotated.json`（256库语义最近邻重标注，286题）
+- `hydro_crack_1024_annotated.json`（1024库语义最近邻重标注，286题）
+
+**评估策略**
+- Hit@K（无 LLM 调用，免费）：chunk_size 消融对比，不含 reranker，纯检索质量
+- RAGAS（有 LLM 调用，有成本）：固定 chunk_size，对比不同 embedding 模型
+
+评估命令：
+```bash
+python scripts/eval_precision_at_k.py --input data/qa_dataset/hydro_crack_qa_annotated.json --collection hydro_crack --top_k 10
+python scripts/eval_precision_at_k.py --input data/qa_dataset/hydro_crack_256_annotated.json --collection hydro_crack_256 --top_k 10
+python scripts/eval_precision_at_k.py --input data/qa_dataset/hydro_crack_1024_annotated.json --collection hydro_crack_1024 --top_k 10
+```
+
+**Bug 修复**
+- `graphs/rag_graph.py`：补加 `import json`（decompose 节点缺失，导致所有多跳判断静默失败，全部退回单查询模式）
+
+**新增脚本**
+
+| 文件 | 说明 |
+|------|------|
+| `scripts/generate_qa_from_chunks.py` | 直接从 Chroma collection 生成 QA，含精确 chunk_id 标注 |
+| `scripts/ingest_ablation.py` | 三组 chunk_size 知识库一键入库 |
+| `scripts/run_ragas_ablation.py` | 端到端 RAGAS 评估，支持 `--no_reranker` 隔离检索变量 |
+| `scripts/insert_thesis_sections.py` | 向论文 docx 插入 §4.2.1/4.3.1/4.3.2 |
+| `scripts/update_thesis_embedding.py` | 批量替换论文中 bge-large-zh-v1.5 → bge-m3 描述 |
+
+---
+
 ### 🔲 Level 7c — 高级检索增强（待开发）
 
 **目标一：GraphRAG（知识图谱检索）**
@@ -568,11 +628,14 @@ full_chain = ensemble_retriever | rerank_step | format_docs | prompt | llm | Str
 
 ---
 
-## 六、知识库现状（2026-04-16）
+## 六、知识库现状（2026-05-13）
 
 | 库名 | Chunks | 来源 | Embedding 模型 | 说明 |
 |------|--------|------|----------------|------|
-| `hydro_manual` | 1,632 | 加氢裂化工艺规程（78页） | bge-large-zh-v1.5 | 含 VLM OCR 补表，论文核心实验数据集 |
+| `hydro_manual` | 1,632 | 加氢裂化工艺规程（78页） | bge-large-zh-v1.5 | 含 VLM OCR 补表，早期实验库（已弃用为主力） |
+| `hydro_crack` | 178 | 加氢裂化工艺规程 | **bge-m3** | chunk_size=512 token，消融实验主库 |
+| `hydro_crack_256` | 361 | 加氢裂化工艺规程 | **bge-m3** | chunk_size=256 token，消融对比组 |
+| `hydro_crack_1024` | 98 | 加氢裂化工艺规程 | **bge-m3** | chunk_size=1024 token，消融对比组 |
 | `investment_db` | 7,440 | 投资机构&项目 xlsx | bge-large-zh-v1.5 | 专用清洗脚本，93列→结构化 chunks |
 | `energy_zh` | 12,508 | CNPC/NEA 等中文能源报告（12份） | bge-m3 | 跨语言检索配对库 |
 | `energy_en` | 5,961 | BP/EIA/Shell 等英文能源报告（17份） | bge-m3 | 与 energy_zh 配对 |

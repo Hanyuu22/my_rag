@@ -140,7 +140,7 @@ def evaluate(input_path: str, collection_name: str, top_k: int):
             for k, v in group_stats.items()
         }
     }
-    out = Path("data/results") / f"precision_at_k_{collection_name}.json"
+    out = Path("data/results") / f"precision_at_k_{collection_name}_top{top_k}.json"
     out.parent.mkdir(exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)

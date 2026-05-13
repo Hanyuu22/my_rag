@@ -41,7 +41,7 @@ LLM_TEMPERATURE = 0.1
 # llm = ChatAnthropic(model="claude-sonnet-4-6")
 
 # ── Embedding ─────────────────────────────────────────────────────────────
-EMBEDDING_MODEL_NAME = "BAAI/bge-large-zh-v1.5"   # 本地，中文 MTEB 强
+EMBEDDING_MODEL_NAME = "BAAI/bge-m3"               # 本地，8192 token 上限，中英双语
 EMBEDDING_DEVICE = "cuda"                           # 没 GPU 改 "cpu"
 
 # ── Reranker ──────────────────────────────────────────────────────────────
@@ -60,5 +60,6 @@ RERANKER_TOP_N = 3        # 精排后保留
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "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")
 
 # ── 切分参数 ──────────────────────────────────────────────────────────────
-CHUNK_SIZE = 1024
-CHUNK_OVERLAP = 100
+# 单位：token（bge-m3 上限 8192 tokens）
+CHUNK_SIZE = 512
+CHUNK_OVERLAP = 50

@@ -141,25 +141,32 @@ def run(qa_file: str, collection: str, sample_per_type: int | None,
         print("无有效样本，退出。")
         return
 
-    # RAGAS 整体评估
+    # RAGAS 整体评估（一次性跑，顺带收集逐条分数）
     print("\n运行 RAGAS 评估...")
-    from evaluation.ragas_eval import run_ragas
-    overall = run_ragas(samples_for_ragas, show_progress=True)
+    from evaluation.ragas_eval import run_ragas, aggregate_group_scores
+    ragas_result = run_ragas(samples_for_ragas, show_progress=True, return_per_sample=True)
+    per_sample = ragas_result.pop("per_sample", {})
+    overall = ragas_result
 
     print("\n" + "="*55)
     print("【整体指标】")
     for k, v in overall.items():
-        print(f"  {k:<25} {v:.4f}")
+        if v is not None:
+            print(f"  {k:<25} {v:.4f}")
 
-    # 按题型分组统计
+    # 分组聚合（不重复调用 LLM）
+    by_type       = aggregate_group_scores(samples_for_ragas, per_sample, "question_type")
+    by_difficulty = aggregate_group_scores(samples_for_ragas, per_sample, "difficulty")
+    by_topic      = aggregate_group_scores(samples_for_ragas, per_sample, "topic_tag")
+
     print("\n【按题型细分】")
-    _print_breakdown(samples_for_ragas, "question_type")
+    _print_group(by_type)
 
     print("\n【按难度细分】")
-    _print_breakdown(samples_for_ragas, "difficulty")
+    _print_group(by_difficulty)
 
     print("\n【按主题细分】")
-    _print_breakdown(samples_for_ragas, "topic_tag")
+    _print_group(by_topic)
 
     # 保存结果
     output_path = Path(output)
@@ -168,50 +175,24 @@ def run(qa_file: str, collection: str, sample_per_type: int | None,
         "overall":        overall,
         "n_evaluated":    len(samples_for_ragas),
         "n_failed":       failed,
-        "by_type":        _group_stats(samples_for_ragas, "question_type"),
-        "by_difficulty":  _group_stats(samples_for_ragas, "difficulty"),
-        "by_topic":       _group_stats(samples_for_ragas, "topic_tag"),
+        "by_type":        by_type,
+        "by_difficulty":  by_difficulty,
+        "by_topic":       by_topic,
         "samples":        samples_for_ragas,
     }
     output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2))
     print(f"\n结果已保存：{output_path}")
 
 
-def _group_stats(samples: list[dict], group_key: str) -> dict:
-    """对样本按某字段分组，各组独立跑 RAGAS"""
-    from evaluation.ragas_eval import run_ragas
-
-    groups = defaultdict(list)
-    for s in samples:
-        groups[s.get(group_key, "unknown")].append(s)
-
-    result = {}
-    for gname, gsamples in sorted(groups.items()):
-        try:
-            metrics = run_ragas(gsamples, show_progress=False)
-            result[gname] = {"n": len(gsamples), **metrics}
-        except Exception as e:
-            result[gname] = {"n": len(gsamples), "error": str(e)}
-    return result
-
-
-def _print_breakdown(samples: list[dict], group_key: str):
-    groups = defaultdict(list)
-    for s in samples:
-        groups[s.get(group_key, "unknown")].append(s)
-
-    from evaluation.ragas_eval import run_ragas
-    for gname, gsamps in sorted(groups.items()):
-        try:
-            m = run_ragas(gsamps, show_progress=False)
-            cp = m.get("context_precision", 0)
-            cr = m.get("context_recall",    0)
-            f  = m.get("faithfulness",      0)
-            ar = m.get("answer_relevancy",  0)
-            print(f"  {gname:<15} n={len(gsamps):>3}  "
-                  f"CP={cp:.3f}  CR={cr:.3f}  Faith={f:.3f}  AR={ar:.3f}")
-        except Exception as e:
-            print(f"  {gname:<15} n={len(gsamps):>3}  ERROR: {e}")
+def _print_group(group_stats: dict):
+    """打印分组统计结果（从 aggregate_group_scores 的输出）"""
+    for gname, stat in group_stats.items():
+        cp = stat.get("context_precision") or 0
+        cr = stat.get("context_recall")    or 0
+        f  = stat.get("faithfulness")      or 0
+        ar = stat.get("answer_relevancy")  or 0
+        print(f"  {gname:<15} n={stat['n']:>3}  "
+              f"CP={cp:.3f}  CR={cr:.3f}  Faith={f:.3f}  AR={ar:.3f}")
 
 
 if __name__ == "__main__":
